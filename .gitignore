@@ -1,0 +1,20 @@
+node_modules/
+dist/
+release/
+release-linux/
+.native-cache/
+
+# Local data and secrets. data.db holds the check register; .env holds the
+# encryption key that makes stored bank account numbers readable. Neither
+# belongs in version control.
+data.db
+data.db-shm
+data.db-wal
+.env
+secrets.dat
+secrets.json
+*-key-backup.json
+install-log.txt
+
+.DS_Store
+Thumbs.db

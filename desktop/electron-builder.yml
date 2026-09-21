@@ -1,0 +1,73 @@
+appId: com.richco.checkwriter
+productName: CheckWriter
+copyright: Copyright © 2026 RichCo Enterprises LLC
+
+directories:
+  output: release
+  buildResources: build
+
+# Only what the application actually needs at runtime. The Electron
+# toolchain, the icon sources and the native cache are build-time artefacts
+# and must not be shipped.
+files:
+  - main.cjs
+  - package.json
+  - server/**/*
+  - build/icon.png
+  - "!**/*.map"
+  - "!.native-cache/**/*"
+  - "!scripts/**/*"
+  # better-sqlite3 ships its C sources and build scaffolding. Only the
+  # compiled binary and the JavaScript that loads it are needed at runtime;
+  # the rest is roughly 10 MB of material that cannot be compiled on the
+  # user's machine anyway.
+  - "!node_modules/better-sqlite3/build/Release/obj/**"
+  - "!node_modules/better-sqlite3/build/Release/obj.target/**"
+  - "!node_modules/better-sqlite3/build/Release/test_extension.node"
+  - "!node_modules/better-sqlite3/build/deps/**"
+  - "!node_modules/better-sqlite3/deps/**"
+  - "!node_modules/better-sqlite3/src/**"
+  - "!node_modules/better-sqlite3/build/*.mk"
+  - "!node_modules/better-sqlite3/build/Makefile"
+  - "!node_modules/better-sqlite3/build/binding.Makefile"
+  - "!node_modules/better-sqlite3/build/config.gypi"
+
+# better-sqlite3 is a compiled binary and cannot be bundled into JavaScript,
+# so it ships as a real file tree. Everything inside it except the built
+# binary and its loader is build scaffolding.
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+
+# scripts/fetch-native.mjs has already placed the correct Windows binary for
+# Electron's ABI. Letting electron-builder rebuild would compile it for the
+# Linux build host instead and silently ship an unloadable module.
+npmRebuild: false
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: CheckWriter
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  # A per-user install writes to AppData and needs no administrator prompt,
+  # which matters because the app must be able to write its database.
+  artifactName: CheckWriter-Setup-${version}.${ext}
+  # The database and encryption key live in the user data folder, not the
+  # install folder. Uninstalling must not take the check register with it;
+  # removal of business records has to be a deliberate act by the user.
+  deleteAppDataOnUninstall: false
+
+# No auto-update server is configured. Shipping an update channel that
+# points nowhere would leave the app silently failing update checks.
+publish: null

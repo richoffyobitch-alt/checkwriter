@@ -1,0 +1,481 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* LIGHT MODE */
+:root {
+  --button-outline: rgba(255, 255, 255, 0.10);
+  --badge-outline: rgba(255, 255, 255, 0.06);
+  --opaque-button-border-intensity: 9;
+  --elevate-1: rgba(255, 255, 255, 0.04);
+  --elevate-2: rgba(255, 255, 255, 0.09);
+  --background: 0 0% 4%;
+  --foreground: 0 0% 96%;
+  --border: 0 0% 15%;
+  --card: 0 0% 7%;
+  --card-foreground: 0 0% 96%;
+  --card-border: 0 0% 14%;
+  --sidebar: 0 0% 5%;
+  --sidebar-foreground: 0 0% 92%;
+  --sidebar-border: 0 0% 13%;
+  --sidebar-primary: 0 84% 50%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 0 0% 13%;
+  --sidebar-accent-foreground: 0 0% 97%;
+  --sidebar-ring: 0 84% 58%;
+  --popover: 0 0% 9%;
+  --popover-foreground: 0 0% 96%;
+  --popover-border: 0 0% 16%;
+  --primary: 0 84% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 14%;
+  --secondary-foreground: 0 0% 96%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 60%;
+  --accent: 0 0% 16%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 75% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 0 0% 22%;
+  --ring: 0 84% 58%;
+  --chart-1: 0 84% 60%;
+  --chart-2: 14 82% 56%;
+  --chart-3: 350 72% 48%;
+  --chart-4: 28 84% 58%;
+  --chart-5: 0 0% 62%;
+  --font-sans: Satoshi, Inter, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", Menlo, monospace;
+  --radius: 0.375rem;
+  --shadow-2xs: 0 1px 2px 0 rgb(0 0 0 / 0.50);
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.55);
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.60), 0 1px 1px -1px rgb(0 0 0 / 0.40);
+  --shadow: 0 2px 6px -1px rgb(0 0 0 / 0.70), 0 1px 2px -1px rgb(0 0 0 / 0.50);
+  --shadow-md: 0 6px 16px -2px rgb(0 0 0 / 0.75);
+  --shadow-lg: 0 12px 32px -6px rgb(0 0 0 / 0.80);
+  --shadow-xl: 0 24px 60px -12px rgb(0 0 0 / 0.85);
+  --shadow-2xl: 0 32px 80px -16px rgb(0 0 0 / 0.90);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+
+  /* Fallback for older browsers */
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-primary-border: hsl(
+    from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
+
+  /* Fallback for older browsers */
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --sidebar-accent-border: hsl(
+    from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
+
+  /* Fallback for older browsers */
+  --primary-border: hsl(var(--primary));
+  --primary-border: hsl(
+    from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
+
+  /* Fallback for older browsers */
+  --secondary-border: hsl(var(--secondary));
+  --secondary-border: hsl(
+    from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
+
+  /* Fallback for older browsers */
+  --muted-border: hsl(var(--muted));
+  --muted-border: hsl(
+    from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
+
+  /* Fallback for older browsers */
+  --accent-border: hsl(var(--accent));
+  --accent-border: hsl(
+    from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
+
+  /* Fallback for older browsers */
+  --destructive-border: hsl(var(--destructive));
+  --destructive-border: hsl(
+    from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
+  --glow-red: 0 0 24px -6px hsl(0 84% 58% / 0.55);
+  --grid-line: rgba(255, 255, 255, 0.028);
+}
+
+.dark {
+  --button-outline: rgba(255, 255, 255, 0.10);
+  --badge-outline: rgba(255, 255, 255, 0.06);
+  --opaque-button-border-intensity: 9;
+  --elevate-1: rgba(255, 255, 255, 0.04);
+  --elevate-2: rgba(255, 255, 255, 0.09);
+  --background: 0 0% 4%;
+  --foreground: 0 0% 96%;
+  --border: 0 0% 15%;
+  --card: 0 0% 7%;
+  --card-foreground: 0 0% 96%;
+  --card-border: 0 0% 14%;
+  --sidebar: 0 0% 5%;
+  --sidebar-foreground: 0 0% 92%;
+  --sidebar-border: 0 0% 13%;
+  --sidebar-primary: 0 84% 50%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 0 0% 13%;
+  --sidebar-accent-foreground: 0 0% 97%;
+  --sidebar-ring: 0 84% 58%;
+  --popover: 0 0% 9%;
+  --popover-foreground: 0 0% 96%;
+  --popover-border: 0 0% 16%;
+  --primary: 0 84% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 14%;
+  --secondary-foreground: 0 0% 96%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 60%;
+  --accent: 0 0% 16%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 75% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 0 0% 22%;
+  --ring: 0 84% 58%;
+  --chart-1: 0 84% 60%;
+  --chart-2: 14 82% 56%;
+  --chart-3: 350 72% 48%;
+  --chart-4: 28 84% 58%;
+  --chart-5: 0 0% 62%;
+  --shadow-2xs: 0 1px 2px 0 rgb(0 0 0 / 0.50);
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.55);
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.60), 0 1px 1px -1px rgb(0 0 0 / 0.40);
+  --shadow: 0 2px 6px -1px rgb(0 0 0 / 0.70), 0 1px 2px -1px rgb(0 0 0 / 0.50);
+  --shadow-md: 0 6px 16px -2px rgb(0 0 0 / 0.75);
+  --shadow-lg: 0 12px 32px -6px rgb(0 0 0 / 0.80);
+  --shadow-xl: 0 24px 60px -12px rgb(0 0 0 / 0.85);
+  --shadow-2xl: 0 32px 80px -16px rgb(0 0 0 / 0.90);
+
+  /* Fallback for older browsers */
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-primary-border: hsl(
+    from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
+
+  /* Fallback for older browsers */
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --sidebar-accent-border: hsl(
+    from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
+
+  /* Fallback for older browsers */
+  --primary-border: hsl(var(--primary));
+  --primary-border: hsl(
+    from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
+
+  /* Fallback for older browsers */
+  --secondary-border: hsl(var(--secondary));
+  --secondary-border: hsl(
+    from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
+
+  /* Fallback for older browsers */
+  --muted-border: hsl(var(--muted));
+  --muted-border: hsl(
+    from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
+
+  /* Fallback for older browsers */
+  --accent-border: hsl(var(--accent));
+  --accent-border: hsl(
+    from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
+
+  /* Fallback for older browsers */
+  --destructive-border: hsl(var(--destructive));
+  --destructive-border: hsl(
+    from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
+  --glow-red: 0 0 24px -6px hsl(0 84% 58% / 0.55);
+  --grid-line: rgba(255, 255, 255, 0.028);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+}
+
+/**
+ * Using the elevate system.
+ * Automatic contrast adjustment.
+ *
+ * <element className="hover-elevate" />
+ * <element className="active-elevate-2" />
+ *
+ * // Using the tailwind utility when a data attribute is "on"
+ * <element className="toggle-elevate data-[state=on]:toggle-elevated" />
+ * // Or manually controlling the toggle state
+ * <element className="toggle-elevate toggle-elevated" />
+ *
+ * Elevation systems have to handle many states.
+ * - not-hovered, vs. hovered vs. active  (three mutually exclusive states)
+ * - toggled or not
+ * - focused or not (this is not handled with these utilities)
+ *
+ * Even without handling focused or not, this is six possible combinations that
+ * need to be distinguished from eachother visually.
+ */
+@layer utilities {
+  /* Hide ugly search cancel button in Chrome until we can style it properly */
+  input[type='search']::-webkit-search-cancel-button {
+    @apply hidden;
+  }
+
+  /* Placeholder styling for contentEditable div */
+  [contenteditable][data-placeholder]:empty::before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+  }
+
+  /* .no-default-hover-elevate/no-default-active-elevate is an escape hatch so consumers of
+   * buttons/badges can remove the automatic brightness adjustment on interactions
+   * and program their own. */
+  .no-default-hover-elevate {
+  }
+
+  .no-default-active-elevate {
+  }
+
+  /**
+   * Toggleable backgrounds go behind the content. Hoverable/active goes on top.
+   * This way they can stack/compound. Both will overlap the parent's borders!
+   * So borders will be automatically adjusted both on toggle, and hover/active,
+   * and they will be compounded.
+   */
+  .toggle-elevate::before,
+  .toggle-elevate-2::before {
+    content: '';
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    /*border-radius: inherit;   match rounded corners */
+    border-radius: inherit;
+    z-index: -1;
+    /* sits behind content but above backdrop */
+  }
+
+  .toggle-elevate.toggle-elevated::before {
+    background-color: var(--elevate-2);
+  }
+
+  /* If there's a 1px border, adjust the inset so that it covers that parent's border */
+  .border.toggle-elevate::before {
+    inset: -1px;
+  }
+
+  /* Does not work on elements with overflow:hidden! */
+  .hover-elevate:not(.no-default-hover-elevate),
+  .active-elevate:not(.no-default-active-elevate),
+  .hover-elevate-2:not(.no-default-hover-elevate),
+  .active-elevate-2:not(.no-default-active-elevate) {
+    position: relative;
+    z-index: 0;
+  }
+
+  .hover-elevate:not(.no-default-hover-elevate)::after,
+  .active-elevate:not(.no-default-active-elevate)::after,
+  .hover-elevate-2:not(.no-default-hover-elevate)::after,
+  .active-elevate-2:not(.no-default-active-elevate)::after {
+    content: '';
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    /*border-radius: inherit;   match rounded corners */
+    border-radius: inherit;
+    z-index: 999;
+    /* sits in front of content */
+  }
+
+  .hover-elevate:hover:not(.no-default-hover-elevate)::after,
+  .active-elevate:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-1);
+  }
+
+  .hover-elevate-2:hover:not(.no-default-hover-elevate)::after,
+  .active-elevate-2:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-2);
+  }
+
+  /* If there's a 1px border, adjust the inset so that it covers that parent's border */
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after,
+  .border.active-elevate:not(.no-active-interaction-elevate)::after,
+  .border.hover-elevate-2:not(.no-hover-interaction-elevate)::after,
+  .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
+    inset: -1px;
+  }
+}
+
+/* MICR E13B — bundled for layout and calibration.
+   Production check printing requires a bank-approved MICR font and MICR toner. */
+@font-face {
+  font-family: "MICR E13B";
+  src: url("data:font/ttf;base64,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") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+/* ----------------------------- check printing
+   The MICR line is rendered as SVG (see components/micr-line.tsx) so each
+   E-13B character is placed at an absolute 1/8in position and the baseline sits
+   exactly 3/16in above the aligning (bottom) edge per ANSI X9.13. Do NOT add
+   letter-spacing here: every glyph in this font already advances 0.75em, so a
+   font-size of 1/6in (12pt) yields exactly 1/8in pitch. */
+.micr {
+  font-family: "MICR E13B", "Courier New", monospace;
+  font-feature-settings: "tnum" 1;
+  font-size: 0.1666667in; /* 12pt -> 0.125in advance per character */
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+}
+
+/* Physical check size: US standard business check, 8.5in x 3.5in.
+   8.5in is the minimum that fits all 65 MICR positions, since position 65
+   begins 8 7/16in from the right edge. */
+.check-canvas {
+  width: 8.5in;
+  min-height: 3.5in;
+}
+
+/* Hidden print portal: lives off-screen on screen, shown only during print. */
+.print-portal {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: -1;
+}
+
+@media print {
+  @page {
+    size: 8.5in 3.5in;
+    margin: 0;
+  }
+  html, body {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  /* hide the app shell; show only the print portal */
+  body > #root {
+    display: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-portal {
+    left: 0;
+    top: 0;
+    z-index: 0;
+  }
+  .check-canvas {
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Diagnostic overlays are screen-only guides, never magnetic-ink output. */
+  .micr-diagnostics {
+    display: none !important;
+  }
+}
+
+/* ----------------------------- techy surface treatment */
+body {
+  background-image:
+    radial-gradient(900px 480px at 82% -12%, hsl(0 84% 58% / 0.10), transparent 62%),
+    radial-gradient(700px 420px at 6% 104%, hsl(0 78% 46% / 0.07), transparent 65%);
+  background-attachment: fixed;
+}
+
+/* Faint engineering grid, sits under all content. */
+.grid-surface {
+  position: relative;
+}
+.grid-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+}
+
+/* Hairline top edge that catches the red accent, for cards and panels. */
+.edge-glow {
+  position: relative;
+}
+.edge-glow::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, hsl(0 84% 58% / 0.5), transparent);
+}
+
+.glow-red {
+  box-shadow: var(--glow-red);
+}
+
+/* Tabular figures everywhere money or counts appear. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+::selection {
+  background: hsl(0 84% 58% / 0.32);
+  color: hsl(0 0% 100%);
+}
+
+/* Slim dark scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(0 0% 24%) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: hsl(0 0% 22%);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(0 0% 32%);
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+

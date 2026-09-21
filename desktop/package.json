@@ -1,0 +1,24 @@
+{
+  "name": "checkwriter",
+  "productName": "CheckWriter",
+  "version": "1.0.0",
+  "description": "Business check writer, designer and print preparation",
+  "main": "main.cjs",
+  "author": {
+    "name": "RichCo Enterprises LLC"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --x64 --publish never"
+  },
+  "dependencies": {
+    "better-sqlite3": "12.11.1"
+  },
+  "devDependencies": {
+    "electron": "42.11.6",
+    "electron-builder": "^26.0.12",
+    "node-abi": "^3.96.0"
+  }
+}
