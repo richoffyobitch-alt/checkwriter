@@ -15,6 +15,7 @@
  */
 
 const { app, BrowserWindow, Menu, dialog, shell, safeStorage } = require("electron");
+const updater = require("./updater.cjs");
 const path = require("node:path");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
@@ -207,6 +208,11 @@ function buildMenu() {
           },
         },
         {
+          label: "Check for updates…",
+          click: () => updater.checkNow(),
+        },
+        { type: "separator" },
+        {
           label: "Printing and your bank",
           click: () => {
             dialog.showMessageBox(mainWindow, {
@@ -337,6 +343,11 @@ async function boot() {
 
   buildMenu();
   createWindow(serverInfo.origin);
+
+  /* Background update checks. Never installs without asking — see
+     updater.cjs for why that matters in an application used to write
+     cheques. */
+  updater.start(() => mainWindow);
 
   if (secrets.freshlyCreated && !secrets.sealed) {
     dialog.showMessageBox(mainWindow, {

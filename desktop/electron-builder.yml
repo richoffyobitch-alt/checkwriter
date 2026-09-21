@@ -11,6 +11,7 @@ directories:
 # and must not be shipped.
 files:
   - main.cjs
+  - updater.cjs
   - package.json
   - server/**/*
   - build/icon.png
@@ -68,6 +69,11 @@ nsis:
   # removal of business records has to be a deliberate act by the user.
   deleteAppDataOnUninstall: false
 
-# No auto-update server is configured. Shipping an update channel that
-# points nowhere would leave the app silently failing update checks.
-publish: null
+# Update feed. The repository is public, so the app needs no token to read
+# releases; electron-builder writes latest.yml next to the installer and
+# electron-updater compares against it.
+publish:
+  provider: github
+  owner: richoffyobitch-alt
+  repo: checkwriter
+  releaseType: release
