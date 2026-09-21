@@ -76,21 +76,18 @@ nsis:
 mac:
   category: public.app-category.finance
   icon: build/icon-mac.png
-  # Both current Mac architectures. They are built one at a time by
-  # scripts/build-mac.mjs, because only one native database binary can exist
-  # in node_modules per packaging run.
+  # Architecture is deliberately NOT listed here. An arch list in the target
+  # block overrides the --arm64 / --x64 flag on the command line, so
+  # electron-builder would build both architectures in a single invocation —
+  # and since only one native database binary can exist in node_modules at a
+  # time, one of the two would ship a binary for the wrong CPU.
+  # scripts/build-mac.mjs drives the architectures one at a time instead.
   target:
-    - target: dmg
-      arch:
-        - arm64
-        - x64
+    - dmg
     # zip is not optional: Squirrel.Mac updates from a zip, and without this
     # target electron-builder never writes latest-mac.yml and automatic
     # updates cannot work at all.
-    - target: zip
-      arch:
-        - arm64
-        - x64
+    - zip
   artifactName: CheckWriter-${version}-${arch}.${ext}
   darkModeSupport: true
   # Required for notarization. Harmless on an unsigned build.
