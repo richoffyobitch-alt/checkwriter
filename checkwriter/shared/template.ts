@@ -415,6 +415,255 @@ export interface DesignIssue {
  * things a reasonable user might still want. This never silently repairs a
  * design — the designer surfaces the list so the user decides.
  */
+/* ------------------------------------------ print colour and contrast */
+
+/**
+ * Layout is not the only thing a bank constrains. Checks travel as images
+ * under Check 21, so a check can read perfectly on a magnetic head and
+ * still be rejected because the captured image fails quality analysis.
+ *
+ * Published bank design specifications agree on the shape of the rule:
+ * pastel backgrounds, with black, dark green, red and dark blue called out
+ * as prohibited, and minimum reflectance across the scan areas — roughly
+ * 60% behind the numeric amount and the MICR band, 40% behind the date,
+ * written amount, payee and signature.
+ *
+ * Reflectance describes real ink on real paper, and software cannot
+ * measure it. Relative luminance of the chosen colour is the closest
+ * honest proxy. Everything below is therefore raised as a warning the user
+ * may overrule, never as an error: only their own bank, holding a printed
+ * sample, can actually decide.
+ */
+
+interface Rgb {
+  r: number;
+  g: number;
+  b: number;
+}
+
+const WHITE: Rgb = { r: 255, g: 255, b: 255 };
+
+/** Luminance proxies standing in for the reflectance figures banks publish. */
+const REFLECTANCE_SCAN_AREA = 0.6;
+const REFLECTANCE_DATA_AREA = 0.4;
+/** At or above this a background sits comfortably in the pastel range. */
+const PASTEL_FLOOR = 0.75;
+
+function parseColor(value: string | undefined | null): Rgb | null {
+  if (!value) return null;
+  const hex = value.trim().replace(/^#/, "");
+  if (/^[0-9a-f]{3}$/i.test(hex)) {
+    return {
+      r: parseInt(hex[0] + hex[0], 16),
+      g: parseInt(hex[1] + hex[1], 16),
+      b: parseInt(hex[2] + hex[2], 16),
+    };
+  }
+  if (/^[0-9a-f]{6}$/i.test(hex)) {
+    return {
+      r: parseInt(hex.slice(0, 2), 16),
+      g: parseInt(hex.slice(2, 4), 16),
+      b: parseInt(hex.slice(4, 6), 16),
+    };
+  }
+  return null;
+}
+
+/** WCAG relative luminance: 0 is black, 1 is white. */
+function relativeLuminance(c: Rgb): number {
+  const channel = (v: number) => {
+    const s = v / 255;
+    return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b);
+}
+
+function contrastRatio(a: number, b: number): number {
+  const hi = Math.max(a, b);
+  const lo = Math.min(a, b);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+function hueSat(c: Rgb): { hue: number; sat: number } {
+  const r = c.r / 255;
+  const g = c.g / 255;
+  const b = c.b / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  const l = (max + min) / 2;
+  if (d === 0) return { hue: 0, sat: 0 };
+  const denom = 1 - Math.abs(2 * l - 1);
+  const sat = denom === 0 ? 0 : d / denom;
+  let hue: number;
+  if (max === r) hue = 60 * (((g - b) / d) % 6);
+  else if (max === g) hue = 60 * ((b - r) / d + 2);
+  else hue = 60 * ((r - g) / d + 4);
+  if (hue < 0) hue += 360;
+  return { hue, sat };
+}
+
+/** Composite a colour over a base at the given alpha. */
+function blend(base: Rgb, over: Rgb, alpha: number): Rgb {
+  const a = Math.max(0, Math.min(1, alpha));
+  return {
+    r: base.r * (1 - a) + over.r * a,
+    g: base.g * (1 - a) + over.g * a,
+    b: base.b * (1 - a) + over.b * a,
+  };
+}
+
+/**
+ * The colour the paper will actually carry. Returns null for image
+ * backgrounds, whose content is unknown when the template is validated.
+ */
+export function effectiveBackgroundColor(bg: TemplateBackground): Rgb | null {
+  switch (bg.mode) {
+    case "none":
+      return WHITE;
+    case "color":
+      return parseColor(bg.color) ?? WHITE;
+    case "pattern": {
+      const ink = parseColor(bg.patternColor);
+      if (!ink) return WHITE;
+      /* A pattern inks only part of the sheet, so its opacity doubles as a
+         rough coverage figure. This keeps a sparse, pale pattern from being
+         judged as though it were a solid fill. */
+      return blend(WHITE, ink, bg.patternOpacity ?? 0.12);
+    }
+    case "image":
+      return null;
+    default:
+      return WHITE;
+  }
+}
+
+/**
+ * The fields bank design specifications single out for minimum reflectance.
+ * Contrast is judged only on these; everything else on the check face is
+ * for the human reading it, and the user may style it as they like.
+ */
+const CONTRAST_CRITICAL_KEYS = new Set<FieldKey>([
+  "checkDate",
+  "payee",
+  "numericAmount",
+  "writtenAmount",
+  "signature",
+]);
+
+/** Names the specific colour families bank specifications call out. */
+function prohibitedFamily(c: Rgb): string | null {
+  const lum = relativeLuminance(c);
+  const { hue, sat } = hueSat(c);
+  if (lum < 0.12) return "black";
+  if (sat >= 0.35) {
+    if (hue < 20 || hue >= 340) return "red";
+    if (hue >= 200 && hue < 265 && lum < 0.5) return "dark blue";
+    if (hue >= 90 && hue < 170 && lum < 0.5) return "dark green";
+  }
+  return null;
+}
+
+/**
+ * Colour findings for a design. Separated from validateDesign so the
+ * regression suite can exercise it directly.
+ *
+ * Every issue returned is a warning. A design that trips all of them still
+ * saves and still prints — the user is told what their bank is likely to
+ * object to and decides for themselves.
+ */
+export function validatePrintColour(design: TemplateDesign): DesignIssue[] {
+  const issues: DesignIssue[] = [];
+  const bg = design.background;
+  const bgColor = effectiveBackgroundColor(bg);
+
+  if (bgColor) {
+    const lum = relativeLuminance(bgColor);
+    const family = prohibitedFamily(bgColor);
+
+    if (family) {
+      issues.push({
+        level: "warning",
+        message:
+          `The background is ${family}. Bank design specifications commonly ` +
+          `prohibit black, dark green, red and dark blue because they ` +
+          `interfere with image capture. This may not pass your bank's ` +
+          `validation — check a printed sample with them before relying on it.`,
+      });
+    }
+
+    if (lum < REFLECTANCE_DATA_AREA) {
+      issues.push({
+        level: "warning",
+        message:
+          `The background is very dark. Banks typically want around 40% ` +
+          `reflectance behind the date, payee, written amount and signature, ` +
+          `and about 60% behind the numeric amount. A check this dark can be ` +
+          `rejected on image quality even when the MICR line reads perfectly.`,
+      });
+    } else if (lum < REFLECTANCE_SCAN_AREA) {
+      issues.push({
+        level: "warning",
+        message:
+          `The background may be too dark behind the numeric amount, where ` +
+          `banks commonly expect about 60% reflectance. The MICR line will ` +
+          `still read, but the captured image may not pass validation.`,
+      });
+    } else if (lum < PASTEL_FLOOR) {
+      issues.push({
+        level: "warning",
+        message:
+          `The background is darker than the pastel range bank specifications ` +
+          `recommend. Likely fine, but worth confirming with a printed sample.`,
+      });
+    }
+
+    for (const e of design.elements) {
+      if (e.hidden) continue;
+      if (e.type !== "field") continue;
+      /* Bank specifications name particular information areas — the date,
+         payee, both amounts and the signature. Decorative labels such as
+         the bank name are deliberately set in a lighter grey by the default
+         template and are not areas the bank reads, so holding them to a
+         data-field contrast figure would be a false alarm. */
+      if (!e.fieldKey || !CONTRAST_CRITICAL_KEYS.has(e.fieldKey)) continue;
+      const ink = parseColor(e.color);
+      if (!ink) continue;
+      const ratio = contrastRatio(relativeLuminance(ink), lum);
+      if (ratio < 3) {
+        const label = e.name ?? (e.fieldKey ? FIELD_LABELS[e.fieldKey] : e.type);
+        issues.push({
+          level: "warning",
+          elementId: e.id,
+          message:
+            `${label} has little contrast against the background. Pale ink on ` +
+            `pale paper can disappear when the bank images the check, even ` +
+            `though it looks readable on screen.`,
+        });
+      }
+    }
+  }
+
+  /* Any visible background art sits under fields that bank specifications
+     ask to be left on plain paper. The image case cannot be judged by
+     colour at all, so it is always called out when visible. */
+  const patternVisible =
+    bg.mode === "pattern" && (bg.patternOpacity ?? 0.12) > 0.02;
+  const imageVisible = bg.mode === "image" && (bg.imageOpacity ?? 1) > 0.02;
+
+  if (patternVisible || imageVisible) {
+    issues.push({
+      level: "warning",
+      message:
+        `Bank specifications ask for the payee line, both amount fields and ` +
+        `the signature area to sit on plain paper with no background design ` +
+        `behind them. A background here may not pass your bank's validation.`,
+    });
+  }
+
+  return issues;
+}
+
 export function validateDesign(design: TemplateDesign): DesignIssue[] {
   const issues: DesignIssue[] = [];
   const clearBandTop = CANVAS_H_MM - MICR_CLEAR_BAND_MM;
@@ -463,6 +712,10 @@ export function validateDesign(design: TemplateDesign): DesignIssue[] {
   if (design.background.mode === "image" && (design.background.imageOpacity ?? 1) > 0.35) {
     issues.push({ level: "warning", message: "A background image above 35% opacity can make the payee and amount hard to read, and harder for the bank to image." });
   }
+
+  /* Colour and contrast findings. Warnings only — a design that trips
+     every one of these still saves and still prints. */
+  issues.push(...validatePrintColour(design));
 
   return issues;
 }

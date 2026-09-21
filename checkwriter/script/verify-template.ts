@@ -19,6 +19,8 @@ import {
   isLegacyElement,
   normalizeDesign,
   normalizeElement,
+  validateDesign,
+  validatePrintColour,
   type FieldKey,
   type TemplateElement,
 } from "../shared/template";
@@ -155,6 +157,91 @@ check(
   "normalisation is idempotent",
   JSON.stringify(legacy.elements.map((e) => normalizeElement(e))) === JSON.stringify(legacy.elements),
 );
+
+/* ------------------------------------------------ print colour warnings */
+
+/* These guard a specific promise to the user: the app flags backgrounds and
+   ink that a bank is likely to reject, but never stops them designing the
+   check they asked for. Every finding must be a warning, never an error. */
+
+function designWithBackground(bg: Record<string, unknown>) {
+  const d = defaultDesign();
+  return { ...d, background: { ...d.background, ...bg } as typeof d.background };
+}
+
+const white = validatePrintColour(designWithBackground({ mode: "none" }));
+check("a plain white background raises nothing", white.length === 0);
+
+const pastel = validatePrintColour(designWithBackground({ mode: "color", color: "#eaf4ff" }));
+check("a pastel background raises nothing", pastel.length === 0);
+
+const red = validatePrintColour(designWithBackground({ mode: "color", color: "#eb1414" }));
+check("a red background is flagged", red.some((i) => i.message.includes("red")));
+
+const black = validatePrintColour(designWithBackground({ mode: "color", color: "#000000" }));
+check("a black background is flagged", black.some((i) => i.message.includes("black")));
+
+const navy = validatePrintColour(designWithBackground({ mode: "color", color: "#12306b" }));
+check("a dark blue background is flagged", navy.some((i) => i.message.includes("dark blue")));
+
+const forest = validatePrintColour(designWithBackground({ mode: "color", color: "#125c2a" }));
+check("a dark green background is flagged", forest.some((i) => i.message.includes("dark green")));
+
+const midGrey = validatePrintColour(designWithBackground({ mode: "color", color: "#9a9a9a" }));
+check(
+  "a mid grey background is flagged on reflectance, not colour family",
+  midGrey.length > 0 && midGrey.every((i) => !i.message.includes("prohibit")),
+);
+
+const faintGrey = validatePrintColour(designWithBackground({ mode: "color", color: "#f2f2f2" }));
+check("a very light grey background raises nothing", faintGrey.length === 0);
+
+check(
+  "every colour finding is a warning, so the design still saves",
+  [...red, ...black, ...navy, ...forest, ...midGrey].every((i) => i.level === "warning"),
+);
+
+const darkDesign = designWithBackground({ mode: "color", color: "#000000" });
+check(
+  "a prohibited background produces no blocking error",
+  validateDesign(darkDesign).filter((i) => i.level === "error").length === 0,
+);
+
+const patterned = validatePrintColour(
+  designWithBackground({ mode: "pattern", patternColor: "#cccccc", patternOpacity: 0.2 }),
+);
+check(
+  "a visible pattern warns about the fields that must stay on plain paper",
+  patterned.some((i) => i.message.includes("plain paper")),
+);
+
+const patternOff = validatePrintColour(
+  designWithBackground({ mode: "pattern", patternColor: "#cccccc", patternOpacity: 0 }),
+);
+check("a pattern at zero opacity raises nothing", patternOff.length === 0);
+
+const imaged = validatePrintColour(
+  designWithBackground({ mode: "image", assetId: 1, imageOpacity: 0.2 }),
+);
+check(
+  "an image background is called out even though its colour is unknowable",
+  imaged.some((i) => i.message.includes("plain paper")),
+);
+
+const paleInk = (() => {
+  const d = defaultDesign();
+  const els = d.elements.map((e) =>
+    e.fieldKey === "payee" ? { ...e, color: "#f0f0f0" } : e,
+  );
+  return validatePrintColour({ ...d, elements: els });
+})();
+check(
+  "pale ink on white paper is flagged for contrast",
+  paleInk.some((i) => i.message.includes("little contrast")),
+);
+
+const normalInk = validatePrintColour(defaultDesign());
+check("default black ink on white paper raises no contrast finding", normalInk.length === 0);
 
 console.log(`\n${"=".repeat(70)}`);
 console.log(`TEMPLATE: ${passed} passed, ${failures.length} failed`);

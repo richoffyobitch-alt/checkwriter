@@ -168,6 +168,7 @@ export default function Designer() {
   const selected = design.elements.find((e) => e.id === selectedId) ?? null;
   const issues = useMemo(() => validateDesign(design), [design]);
   const errors = issues.filter((i) => i.level === "error");
+  const warnings = issues.filter((i) => i.level === "warning");
 
   /* Load the first saved template once, so the designer opens on real work
      rather than a blank default the user then has to reconcile. */
@@ -474,6 +475,27 @@ export default function Designer() {
               <p className="font-medium text-destructive">This layout cannot be saved yet</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-4 text-muted-foreground">
                 {errors.map((i, n) => <li key={n}>{i.message}</li>)}
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {warnings.length > 0 && (
+        <Card className="mb-4 border-amber-500/40" data-testid="card-design-warnings">
+          <CardContent className="flex gap-3 pt-4 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <div>
+              <p className="font-medium text-amber-600 dark:text-amber-400">
+                This may not pass your bank's validation
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                You can save and print this design anyway. These are things banks
+                commonly object to — only your bank, looking at a printed sample,
+                can say for certain.
+              </p>
+              <ul className="mt-2 list-disc space-y-0.5 pl-4 text-muted-foreground">
+                {warnings.map((i, n) => <li key={n}>{i.message}</li>)}
               </ul>
             </div>
           </CardContent>
