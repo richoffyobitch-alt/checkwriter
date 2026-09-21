@@ -53,36 +53,108 @@ jobs:
         working-directory: desktop
         run: npm ci
 
-      - name: Build macOS application
+      # An absent secret still defines the environment variable, as an empty
+      # string, and electron-builder then treats "" as a path to a
+      # certificate and fails with "not a file". So signing configuration is
+      # decided here and the two cases are separate steps.
+      - name: Determine signing configuration
+        id: signing
+        env:
+          CERT: ${{ secrets.MAC_CERTIFICATE_P12 }}
+        run: |
+          if [ -n "$CERT" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "Developer ID certificate present: the build will be signed."
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "No certificate. Building unsigned — Gatekeeper will warn on"
+            echo "first launch and the app will use notify-only updates."
+          fi
+
+      - name: Build macOS application (unsigned)
+        if: steps.signing.outputs.signed == 'false'
         working-directory: desktop
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Signing is optional. When these secrets are absent the build is
-          # unsigned, the app reports that to itself through build-info.json,
-          # and the updater falls back to notify-only rather than repeatedly
-          # downloading updates macOS would refuse to install.
-          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12 }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
           # Without an explicit false, electron-builder hunts the keychain
           # for any identity and fails confusingly when it finds none.
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CERTIFICATE_P12 != '' }}
-          # Notarization. Separate from signing, and what actually clears
-          # Gatekeeper's first-launch block.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run dist:mac
+
+      - name: Build macOS application (signed and notarized)
+        if: steps.signing.outputs.signed == 'true'
+        working-directory: desktop
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          # Notarization is separate from signing and is what actually
+          # clears Gatekeeper's first-launch block.
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run dist:mac
+
+      # The point of building on a Mac is that the result can be run on one.
+      # This launches the packaged application and then proves three things
+      # that no cross-build could: Electron started, the native database
+      # module loaded under Electron's ABI, and the local server is serving.
+      #
+      # "The process is still alive" would not be enough on its own — a fatal
+      # error here shows a modal dialog, which also keeps the process alive.
+      # So the check is that the app is listening on loopback and answers.
+      - name: Smoke-test the packaged app on macOS
+        working-directory: desktop
+        run: |
+          set -euo pipefail
+          APP="$PWD/release/mac-arm64/CheckWriter.app"
+          echo "Launching $APP"
+          open -n "$APP"
+
+          PID=""
+          for i in $(seq 1 30); do
+            PID=$(pgrep -f "CheckWriter.app/Contents/MacOS/CheckWriter" | head -1 || true)
+            [ -n "$PID" ] && break
+            sleep 1
+          done
+          if [ -z "$PID" ]; then
+            echo "::error::The packaged app never started a process."
+            exit 1
+          fi
+          echo "Running as pid $PID"
+
+          PORT=""
+          for i in $(seq 1 40); do
+            PORT=$(lsof -nP -iTCP -sTCP:LISTEN -a -p "$PID" 2>/dev/null \
+                   | awk 'NR>1 {split($9,a,":"); print a[length(a)]}' | head -1 || true)
+            [ -n "$PORT" ] && break
+            sleep 1
+          done
+          if [ -z "$PORT" ]; then
+            echo "::error::The app started but never listened on a port. That is"
+            echo "::error::what a failure to load the native database module looks like."
+            kill "$PID" 2>/dev/null || true
+            exit 1
+          fi
+          echo "Listening on 127.0.0.1:$PORT"
+
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/api/health" || echo 000)
+          kill "$PID" 2>/dev/null || true
+          if [ "$CODE" != "200" ]; then
+            echo "::error::/api/health returned $CODE, expected 200."
+            exit 1
+          fi
+          echo "Smoke test passed: app launched, database module loaded, /api/health 200." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Report what was produced
         working-directory: desktop
         run: |
           echo "### macOS artifacts" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          ls -lh release/*.dmg release/*.zip release/latest-mac.yml >> "$GITHUB_STEP_SUMMARY"
+          ls -lh release/*.dmg release/*.zip release/latest-mac.yml | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           echo "### SHA-256" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          shasum -a 256 release/*.dmg release/*.zip >> "$GITHUB_STEP_SUMMARY"
+          shasum -a 256 release/*.dmg release/*.zip | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           # Say plainly whether this build can be opened without the
           # Gatekeeper workaround, because it changes the install
@@ -131,8 +203,8 @@ jobs:
         run: |
           echo "### Windows artifacts" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          ls -lh release/*.exe release/latest.yml >> "$GITHUB_STEP_SUMMARY"
-          sha256sum release/*.exe >> "$GITHUB_STEP_SUMMARY"
+          ls -lh release/*.exe release/latest.yml | tee -a "$GITHUB_STEP_SUMMARY"
+          sha256sum release/*.exe | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
