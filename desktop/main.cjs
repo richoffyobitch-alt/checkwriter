@@ -29,6 +29,15 @@ if (!gotLock) {
   return;
 }
 
+const IS_MAC = process.platform === "darwin";
+
+/* Every user-facing sentence about the OS keystore or about "your account"
+   has to name the right operating system. Getting this wrong in a dialog
+   that appears when someone's bank details will not decrypt is not a
+   cosmetic problem — it sends them looking in the wrong place. */
+const OS_NAME = IS_MAC ? "macOS" : "Windows";
+const KEYSTORE_NAME = IS_MAC ? "the macOS Keychain" : "Windows DPAPI";
+
 const USER_DATA = app.getPath("userData");
 const DB_PATH = path.join(USER_DATA, "data.db");
 const KEY_FILE = path.join(USER_DATA, "secrets.dat");
@@ -46,16 +55,18 @@ let serverInfo = null;
  * those fields decrypt to null and the bank details are gone, so it is
  * generated once and then never regenerated.
  *
- * At rest it is sealed with Electron's safeStorage, which on Windows is
- * backed by DPAPI and tied to the logged-in Windows account. That means a
- * copy of secrets.dat lifted off the disk is useless on another machine or
- * under another user.
+ * At rest it is sealed with Electron's safeStorage, which is backed by DPAPI
+ * on Windows and by the login Keychain on macOS. Either way it is tied to
+ * the logged-in account, so a copy of secrets.dat lifted off the disk is
+ * useless on another machine or under another user.
  *
- * DPAPI's strength is also its failure mode: reinstalling Windows or moving
- * to a new user account makes the sealed blob undecryptable. The Help menu
- * therefore offers an explicit key backup, and restoreFromPlain() accepts a
- * recovery file. Falling back to an unsealed file is allowed only where the
- * OS provides no keystore, and it is reported in the UI rather than hidden.
+ * That strength is also the failure mode, and it is the same on both
+ * platforms: reinstalling the OS, migrating to a new Mac without the
+ * Keychain, or opening the app under a different account makes the sealed
+ * blob undecryptable. The File menu therefore offers an explicit key backup.
+ * Falling back to an unsealed file is allowed only where the OS provides no
+ * keystore — on Linux without a running secret service — and it is reported
+ * to the user rather than hidden.
  */
 function loadOrCreateSecrets() {
   const sealed = safeStorage.isEncryptionAvailable();
@@ -70,8 +81,13 @@ function loadOrCreateSecrets() {
          clean start. Stop and let the user restore instead. */
       throw new Error(
         "CheckWriter could not unlock its saved encryption key.\n\n" +
-          "This normally happens after a Windows reinstall or when the app " +
-          "is opened under a different Windows user account.\n\n" +
+          (IS_MAC
+            ? "This normally happens after migrating to a new Mac without " +
+              "your Keychain, after a macOS reinstall, or when the app is " +
+              "opened under a different macOS user account."
+            : "This normally happens after a Windows reinstall or when the " +
+              "app is opened under a different Windows user account.") +
+          "\n\n" +
           "If you saved a key backup, use it to restore. Without it, stored " +
           "bank account numbers cannot be read.\n\n" +
           `Technical detail: ${err.message}`,
@@ -143,13 +159,57 @@ async function backupKey() {
 /* Window and menu                                                     */
 /* ------------------------------------------------------------------ */
 
+function showAbout() {
+  dialog.showMessageBox(mainWindow ?? undefined, {
+    type: "info",
+    title: "About CheckWriter",
+    message: `CheckWriter ${app.getVersion()}`,
+    detail:
+      `Electron ${process.versions.electron}\n` +
+      `Node ${process.versions.node}\n\n` +
+      `Data folder:\n${USER_DATA}\n\n` +
+      "Your data stays on this computer. Nothing is sent to a server.\n\n" +
+      "Before printing on real check stock, run a test print from " +
+      "Printers & Calibration and have your bank confirm a physical " +
+      "sample scans correctly on their equipment.",
+  });
+}
+
 function buildMenu() {
+  /* macOS puts About and Quit in the application menu, not in File, and it
+     promotes whatever menu comes first into that position. Leaving the
+     Windows layout in place would produce a menu bar reading "File" where
+     every Mac user expects "CheckWriter", with Quit in the wrong place. */
+  const appMenu = IS_MAC
+    ? [
+        {
+          label: app.name,
+          submenu: [
+            { label: "About CheckWriter", click: () => showAbout() },
+            {
+              label: "Check for Updates…",
+              click: () => updater.checkNow(),
+            },
+            { type: "separator" },
+            { role: "services" },
+            { type: "separator" },
+            { role: "hide" },
+            { role: "hideOthers" },
+            { role: "unhide" },
+            { type: "separator" },
+            { role: "quit" },
+          ],
+        },
+      ]
+    : [];
+
   const template = [
+    ...appMenu,
     {
       label: "File",
       submenu: [
         {
-          label: "Open data folder",
+          label: IS_MAC ? "Reveal Data Folder in Finder" : "Open data folder",
           click: () => shell.openPath(USER_DATA),
         },
         {
@@ -157,9 +217,19 @@ function buildMenu() {
           click: () => backupKey(),
         },
         { type: "separator" },
-        { role: "print", accelerator: "CmdOrCtrl+P" },
+        {
+          label: "Print…",
+          accelerator: "CmdOrCtrl+P",
+          click: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.print({});
+            }
+          },
+        },
+        /* On macOS Quit belongs to the application menu above; repeating it
+           here would be a second Cmd+Q binding. Close the window instead. */
         { type: "separator" },
-        { role: "quit" },
+        IS_MAC ? { role: "close" } : { role: "quit" },
       ],
     },
     {
@@ -186,32 +256,33 @@ function buildMenu() {
         { role: "toggleDevTools" },
       ],
     },
+    ...(IS_MAC
+      ? [
+          {
+            label: "Window",
+            submenu: [
+              { role: "minimize" },
+              { role: "zoom" },
+              { type: "separator" },
+              { role: "front" },
+            ],
+          },
+        ]
+      : []),
     {
+      role: "help",
       label: "Help",
       submenu: [
-        {
-          label: "About CheckWriter",
-          click: () => {
-            dialog.showMessageBox(mainWindow, {
-              type: "info",
-              title: "About CheckWriter",
-              message: `CheckWriter ${app.getVersion()}`,
-              detail:
-                `Electron ${process.versions.electron}\n` +
-                `Node ${process.versions.node}\n\n` +
-                `Data folder:\n${USER_DATA}\n\n` +
-                "Your data stays on this computer. Nothing is sent to a server.\n\n" +
-                "Before printing on real check stock, run a test print from " +
-                "Printers & Calibration and have your bank confirm a physical " +
-                "sample scans correctly on their equipment.",
-            });
-          },
-        },
-        {
-          label: "Check for updates…",
-          click: () => updater.checkNow(),
-        },
-        { type: "separator" },
+        /* Both of these live in the application menu on macOS. Listing them
+           twice is a Mac-app smell and doubles the ways to reach the same
+           dialog. */
+        ...(IS_MAC
+          ? []
+          : [
+              { label: "About CheckWriter", click: () => showAbout() },
+              { label: "Check for updates…", click: () => updater.checkNow() },
+              { type: "separator" },
+            ]),
         {
           label: "Printing and your bank",
           click: () => {
@@ -329,7 +400,7 @@ async function boot() {
   }
 
   try {
-    /* Port 0 asks Windows for any free loopback port. */
+    /* Port 0 asks the OS for any free loopback port. */
     const { port, host } = await startServer({ port: 0, host: "127.0.0.1" });
     serverInfo = { port, host, origin: `http://${host}:${port}` };
   } catch (err) {
@@ -353,12 +424,13 @@ async function boot() {
     dialog.showMessageBox(mainWindow, {
       type: "warning",
       title: "Encryption key stored without OS protection",
-      message: "Windows secure storage was not available.",
+      message: `${OS_NAME} secure storage was not available.`,
       detail:
         "CheckWriter generated your encryption key but could not seal it " +
         "with the operating system keystore, so it is stored as a plain " +
-        `file in:\n${USER_DATA}\n\nAnyone with access to this Windows ` +
-        "account can read it. Consider enabling disk encryption.",
+        `file in:\n${USER_DATA}\n\nAnyone with access to this ${OS_NAME} ` +
+        "account can read it. Consider enabling disk encryption" +
+        (IS_MAC ? " (FileVault)." : " (BitLocker)."),
     });
   }
 }
@@ -372,6 +444,25 @@ app.on("second-instance", () => {
 
 app.whenReady().then(boot);
 
+/* Closing the last window means "done" on Windows and "put it away" on
+   macOS, where an app is expected to stay in the Dock until it is quit.
+   Following the Windows rule on a Mac would make Cmd+W look like data loss
+   to someone half-way through a check run. The local server keeps running
+   either way, which costs nothing and makes reopening instant. */
 app.on("window-all-closed", () => {
-  app.quit();
+  if (!IS_MAC) app.quit();
+});
+
+/* Clicking the Dock icon with no window open has to bring one back — this
+   is the other half of the rule above, and without it the app appears to be
+   running but unreachable. serverInfo is already set, so this reattaches to
+   the same local server rather than starting a second one. */
+app.on("activate", () => {
+  if (!serverInfo) return;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    return;
+  }
+  createWindow(serverInfo.origin);
 });

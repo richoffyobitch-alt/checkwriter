@@ -15,6 +15,7 @@ files:
   - package.json
   - server/**/*
   - build/icon.png
+  - build/build-info.json
   - "!**/*.map"
   - "!.native-cache/**/*"
   - "!scripts/**/*"
@@ -39,10 +40,13 @@ files:
 asarUnpack:
   - node_modules/better-sqlite3/**/*
 
-# scripts/fetch-native.mjs has already placed the correct Windows binary for
-# Electron's ABI. Letting electron-builder rebuild would compile it for the
-# Linux build host instead and silently ship an unloadable module.
+# scripts/fetch-native.mjs has already placed the correct binary for the
+# target platform and Electron's ABI. Letting electron-builder rebuild would
+# compile it for the build host instead and silently ship an unloadable
+# module. scripts/after-pack.cjs re-checks the binary inside each produced
+# bundle, because "silently" is the dangerous word in that sentence.
 npmRebuild: false
+afterPack: scripts/after-pack.cjs
 
 win:
   target:
@@ -68,6 +72,60 @@ nsis:
   # install folder. Uninstalling must not take the check register with it;
   # removal of business records has to be a deliberate act by the user.
   deleteAppDataOnUninstall: false
+
+mac:
+  category: public.app-category.finance
+  icon: build/icon-mac.png
+  # Both current Mac architectures. They are built one at a time by
+  # scripts/build-mac.mjs, because only one native database binary can exist
+  # in node_modules per packaging run.
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    # zip is not optional: Squirrel.Mac updates from a zip, and without this
+    # target electron-builder never writes latest-mac.yml and automatic
+    # updates cannot work at all.
+    - target: zip
+      arch:
+        - arm64
+        - x64
+  artifactName: CheckWriter-${version}-${arch}.${ext}
+  darkModeSupport: true
+  # Required for notarization. Harmless on an unsigned build.
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # The build host has no Developer ID, so asking Gatekeeper to assess an
+  # unsigned bundle only produces a confusing build failure.
+  gatekeeperAssess: false
+  # Apple Silicon and the last Intel Macs. 11.0 is the floor Electron itself
+  # supports, so claiming anything lower would be a false promise.
+  minimumSystemVersion: "11.0"
+  extendInfo:
+    NSHumanReadableCopyright: Copyright © 2026 RichCo Enterprises LLC
+    # Shown by macOS if it ever prompts about printing. No camera,
+    # microphone, contacts or location keys appear here because the app uses
+    # none of them, and an unexplained permission prompt from check-writing
+    # software would rightly alarm someone.
+    NSPrintingUsageDescription: CheckWriter prints checks to your printer.
+
+dmg:
+  artifactName: CheckWriter-${version}-${arch}.${ext}
+  # The standard drag-to-Applications layout. Installing anywhere else works,
+  # but /Applications is where the updater expects to find the bundle.
+  contents:
+    - x: 140
+      y: 205
+      type: file
+    - x: 400
+      y: 205
+      type: link
+      path: /Applications
+  window:
+    width: 540
+    height: 380
 
 # Update feed. The repository is public, so the app needs no token to read
 # releases; electron-builder writes latest.yml next to the installer and

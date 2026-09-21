@@ -3,15 +3,22 @@
  *
  * better-sqlite3 contains compiled C++. The copy npm installs is built for
  * the machine doing the installing — here, Linux — but the shipped artifact
- * has to run on Windows under Electron's ABI, not Node's.
+ * has to run on Windows or macOS under Electron's ABI, not Node's.
  *
- * Compiling a Windows binary on Linux would mean a full MSVC cross-toolchain.
- * There is no need: the project publishes prebuilt binaries for every
- * supported Electron ABI and platform, so this fetches the right one and
- * drops it where require() will find it.
+ * Cross-compiling would mean a full MSVC or Xcode toolchain. There is no
+ * need: the project publishes prebuilt binaries for every supported Electron
+ * ABI, platform and architecture, so this fetches the right one and drops it
+ * where require() will find it.
+ *
+ * Only one binary can sit in node_modules at a time, so a build targeting
+ * two architectures runs this once per architecture and packages in between.
+ * scripts/build-mac.mjs does that, and the afterPack hook re-checks the
+ * binary actually inside each produced bundle — a mismatch here would
+ * otherwise surface only as a crash on the user's machine.
  *
  * Usage: node scripts/fetch-native.mjs <platform> <arch>
  *   e.g. node scripts/fetch-native.mjs win32 x64
+ *        node scripts/fetch-native.mjs darwin arm64
  */
 
 import { createWriteStream } from "node:fs";
@@ -21,6 +28,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const run = promisify(execFile);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -30,6 +38,14 @@ const platform = process.argv[2];
 const arch = process.argv[3] || "x64";
 if (!platform) {
   console.error("usage: node scripts/fetch-native.mjs <platform> <arch>");
+  process.exit(1);
+}
+if (!["win32", "darwin", "linux"].includes(platform)) {
+  console.error(`unsupported platform: ${platform}`);
+  process.exit(1);
+}
+if (!["x64", "arm64"].includes(arch)) {
+  console.error(`unsupported arch: ${arch}`);
   process.exit(1);
 }
 
@@ -86,19 +102,21 @@ await copyFile(extracted, target);
 const { size } = await stat(target);
 console.log(`installed      ${target} (${(size / 1024 / 1024).toFixed(1)} MB)`);
 
-/* Confirm the binary really is for the requested platform rather than the
-   host's. A silently wrong architecture here produces an installer that
-   fails only on the user's machine, which is the worst place to find out. */
-const { stdout } = await run("file", ["-b", target]).catch(() => ({ stdout: "" }));
-if (stdout) {
-  console.log(`verified       ${stdout.trim()}`);
-  const expectWindows = platform === "win32";
-  const looksWindows = /PE32\+?|MS Windows/i.test(stdout);
-  if (expectWindows !== looksWindows) {
-    console.error(
-      `\nBinary does not match the requested platform.\n` +
-        `Expected ${platform}, but file(1) reports: ${stdout.trim()}`,
-    );
-    process.exit(1);
-  }
-}
+/* Confirm the binary really is for the requested platform AND architecture
+   rather than the host's. A silently wrong binary produces an installer that
+   fails only on the user's machine, which is the worst place to find out —
+   and on macOS an arm64/x64 mix-up is particularly easy to make, because
+   both are Mach-O and both are current shipping architectures.
+
+   The header is parsed directly rather than shelling out to file(1), which
+   does not exist on a Windows build runner. A check that silently does
+   nothing on one platform is worse than no check at all. */
+const { assertTarget } = createRequire(import.meta.url)("./binary-target.cjs");
+
+const found = assertTarget(
+  target,
+  platform,
+  arch,
+  `The prebuilt binary downloaded from ${url} is not what it claims to be.`,
+);
+console.log(`verified       ${found.description}`);

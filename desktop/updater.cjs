@@ -14,10 +14,61 @@
  * Automatic checks also fail silently. A laptop with no connection is the
  * normal case, not an error worth a dialog. Only a check the user explicitly
  * asked for reports back when nothing is found or something goes wrong.
+ *
+ * And on macOS there is a hard platform constraint. Squirrel.Mac refuses to
+ * apply an update to an application that is not code-signed — it validates
+ * the running bundle's signature before swapping it, and an unsigned build
+ * fails with "Could not get code signature for running application". There
+ * is no flag that turns that off, and there should not be: it is the only
+ * thing standing between an update feed and arbitrary code execution.
+ *
+ * So an unsigned Mac build downgrades to notify-only. It still checks, and
+ * it still tells the user a new version exists, but it sends them to the
+ * releases page instead of downloading an update it could never install.
+ * Pretending otherwise would mean a silent failure loop and a user who
+ * believes they are up to date when they are not. The moment the build is
+ * signed with a Developer ID, build-info.json says so and full automatic
+ * updates switch on with no code change.
  */
 
 const { app, dialog, shell } = require("electron");
 const { autoUpdater } = require("electron-updater");
+const path = require("node:path");
+const fs = require("node:fs");
+
+const RELEASES_URL =
+  "https://github.com/richoffyobitch-alt/checkwriter/releases/latest";
+
+/**
+ * Written by the build scripts. Absent in development and in any build made
+ * before this file existed, so every read has to tolerate that.
+ */
+function readBuildInfo() {
+  try {
+    const raw = fs.readFileSync(
+      path.join(__dirname, "build", "build-info.json"),
+      "utf8",
+    );
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * True when this build cannot install its own updates and must instead point
+ * the user at the download page.
+ *
+ * Defaulting to notify-only when build-info.json is missing is deliberate:
+ * an unknown signing state on macOS is far more likely to be unsigned, and
+ * being wrong in that direction costs one extra click, while being wrong the
+ * other way costs a download that always fails.
+ */
+function isNotifyOnly() {
+  if (process.platform !== "darwin") return false;
+  return readBuildInfo().macSigned !== true;
+}
 
 /** Re-check roughly twice a day while the app stays open. */
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -64,9 +115,7 @@ async function offerInstall(info) {
     });
 
     if (response === 2) {
-      await shell.openExternal(
-        "https://github.com/richoffyobitch-alt/checkwriter/releases/latest",
-      );
+      await shell.openExternal(RELEASES_URL);
       promptOpen = false;
       return;
     }
@@ -81,13 +130,48 @@ async function offerInstall(info) {
   }
 }
 
+/**
+ * The notify-only path. Nothing is downloaded, because nothing downloaded
+ * could be installed; the user is offered the releases page instead.
+ */
+async function offerDownload(info) {
+  if (promptOpen) return;
+  promptOpen = true;
+  try {
+    const { response } = await dialog.showMessageBox(windowOrUndefined(), {
+      type: "info",
+      buttons: ["Open download page", "Not now"],
+      defaultId: 0,
+      cancelId: 1,
+      title: "Update available",
+      message: `CheckWriter ${info.version} is available.`,
+      detail:
+        `You are running ${app.getVersion()}.\n\n` +
+        "This copy cannot update itself. macOS only allows an application " +
+        "to replace itself if it carries an Apple Developer ID signature, " +
+        "and this build is unsigned — so the download and install have to " +
+        "be done by hand.\n\nYour businesses, checks, payees and " +
+        "encryption key live outside the application and are not affected " +
+        "by installing a new version over the old one.",
+    });
+    if (response === 0) await shell.openExternal(RELEASES_URL);
+  } finally {
+    promptOpen = false;
+  }
+}
+
 function wire() {
   autoUpdater.on("checking-for-update", () => log("checking"));
 
   autoUpdater.on("update-available", (info) => {
     log("available:", info.version);
-    /* Downloading starts on its own. Saying nothing here keeps a background
-       check invisible until there is actually something to act on. */
+    if (isNotifyOnly()) {
+      userRequested = false;
+      offerDownload(info);
+      return;
+    }
+    /* Otherwise downloading starts on its own. Saying nothing here keeps a
+       background check invisible until there is something to act on. */
   });
 
   autoUpdater.on("update-not-available", () => {
@@ -143,6 +227,7 @@ function checkNow() {
     return;
   }
   userRequested = true;
+  autoUpdater.autoDownload = !isNotifyOnly();
   autoUpdater.checkForUpdates().catch(() => {
     /* Reported through the error event. */
   });
@@ -160,9 +245,16 @@ function start(getMainWindow) {
     return;
   }
 
-  autoUpdater.autoDownload = true;
+  const notifyOnly = isNotifyOnly();
+  if (notifyOnly) {
+    log("unsigned macOS build — notify-only updates");
+  }
+
+  /* Downloading an update that Squirrel.Mac will refuse to install would
+     spend the user's bandwidth to reach a dead end. */
+  autoUpdater.autoDownload = !notifyOnly;
   /* If the user declines an immediate restart, apply it on the way out. */
-  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoInstallOnAppQuit = !notifyOnly;
   /* Never move someone from a stable release onto a pre-release. */
   autoUpdater.allowPrerelease = false;
   autoUpdater.allowDowngrade = false;

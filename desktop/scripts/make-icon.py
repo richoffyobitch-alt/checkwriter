@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Builds the Windows application icon from the mark used inside the app.
+Builds the Windows and macOS application icons from the mark used inside
+the app.
 
 The in-app logo is five bars of alternating weight on a rounded square — a
 nod to the magnetic-ink characters along the bottom of a check. That reads
@@ -63,6 +64,44 @@ def render(size: int, bars, supersample: int = 8) -> Image.Image:
     return img.resize((size, size), Image.LANCZOS)
 
 
+# macOS draws icons on a fixed grid rather than edge to edge. On a 1024px
+# canvas the rounded square occupies 824px centred, leaving a 100px margin
+# the system uses for its own drop shadow and for the hover/press animation
+# in the Dock. An icon that fills the whole canvas looks oversized next to
+# every other app, so this is not cosmetic fussiness.
+MAC_CANVAS = 1024
+MAC_BODY = 824
+# Apple's squircle is close to 22.5% of the body width. Pillow draws a true
+# circular arc rather than a superellipse; at this radius the difference is
+# not visible at Dock sizes.
+MAC_RADIUS_RATIO = 0.225
+
+
+def render_mac(supersample: int = 4) -> Image.Image:
+    """Draw the mark on the macOS icon grid: 824px body on a 1024px canvas."""
+    canvas = MAC_CANVAS * supersample
+    body = MAC_BODY * supersample
+    inset = (canvas - body) // 2
+    scale = body / 32.0
+
+    img = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    draw.rounded_rectangle(
+        [inset, inset, inset + body - 1, inset + body - 1],
+        radius=body * MAC_RADIUS_RATIO,
+        fill=BRAND,
+    )
+
+    for x, y, w, h in FULL_BARS:
+        x0, y0 = inset + x * scale, inset + y * scale
+        x1, y1 = inset + (x + w) * scale, inset + (y + h) * scale
+        r = min(0.6 * scale, (x1 - x0) / 2, (y1 - y0) / 2)
+        draw.rounded_rectangle([x0, y0, x1, y1], radius=r, fill=WHITE)
+
+    return img.resize((MAC_CANVAS, MAC_CANVAS), Image.LANCZOS)
+
+
 def main() -> None:
     here = os.path.dirname(os.path.abspath(__file__))
     out_dir = os.path.join(os.path.dirname(here), "build")
@@ -95,6 +134,12 @@ def main() -> None:
     png_path = os.path.join(out_dir, "icon.png")
     render(512, FULL_BARS).save(png_path, format="PNG")
     print(f"wrote {png_path}")
+
+    # macOS. electron-builder converts this to a multi-resolution .icns, and
+    # it must be exactly 1024x1024 or the conversion is rejected.
+    mac_path = os.path.join(out_dir, "icon-mac.png")
+    render_mac().save(mac_path, format="PNG")
+    print(f"wrote {mac_path}")
 
     # Contact sheet so the icon can be eyeballed at real sizes.
     pad = 24

@@ -1,0 +1,171 @@
+name: Release
+
+# Builds the installable applications on the operating systems they target.
+#
+# This exists for two reasons.
+#
+# A .dmg is created with hdiutil and a macOS code signature is made with the
+# macOS security framework. Neither tool exists anywhere but on a Mac, so a
+# macOS release simply cannot be produced on any other host — the best a
+# Linux box can manage is an unsigned .zip, which Gatekeeper will refuse to
+# open without the user stripping the quarantine flag by hand.
+#
+# The second reason is duller and just as real: release assets are uploaded
+# from the runner, which has unrestricted access to uploads.github.com. That
+# has been the bottleneck on every previous release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build and attach to, e.g. v1.3.0"
+        required: true
+        type: string
+      draft:
+        description: "Create the release as a draft"
+        required: false
+        default: true
+        type: boolean
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS (arm64 + Intel)
+    # macos-14 and later are Apple Silicon. Intel artifacts are still
+    # produced from it: the native database binary is downloaded per
+    # architecture rather than compiled, so no Intel host is needed.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install build dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build macOS application
+        working-directory: desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signing is optional. When these secrets are absent the build is
+          # unsigned, the app reports that to itself through build-info.json,
+          # and the updater falls back to notify-only rather than repeatedly
+          # downloading updates macOS would refuse to install.
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          # Without an explicit false, electron-builder hunts the keychain
+          # for any identity and fails confusingly when it finds none.
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CERTIFICATE_P12 != '' }}
+          # Notarization. Separate from signing, and what actually clears
+          # Gatekeeper's first-launch block.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run dist:mac
+
+      - name: Report what was produced
+        working-directory: desktop
+        run: |
+          echo "### macOS artifacts" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ls -lh release/*.dmg release/*.zip release/latest-mac.yml >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "### SHA-256" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          shasum -a 256 release/*.dmg release/*.zip >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # Say plainly whether this build can be opened without the
+          # Gatekeeper workaround, because it changes the install
+          # instructions the user has to give people.
+          if codesign -dv --verbose=2 "release/mac-arm64/CheckWriter.app" 2>&1 | grep -q "Authority=Developer ID"; then
+            echo "Signed with a Developer ID." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "UNSIGNED — first launch needs Control-click, Open, or xattr -cr." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            desktop/release/*.dmg
+            desktop/release/*.zip
+            desktop/release/*.blockmap
+            desktop/release/latest-mac.yml
+          if-no-files-found: error
+
+  windows:
+    name: Windows (x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install build dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build Windows installer
+        working-directory: desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run dist:win
+
+      - name: Report what was produced
+        working-directory: desktop
+        shell: bash
+        run: |
+          echo "### Windows artifacts" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ls -lh release/*.exe release/latest.yml >> "$GITHUB_STEP_SUMMARY"
+          sha256sum release/*.exe >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            desktop/release/*.exe
+            desktop/release/*.blockmap
+            desktop/release/latest.yml
+          if-no-files-found: error
+
+  publish:
+    name: Attach to release
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect
+        run: |
+          mkdir -p upload
+          find artifacts -type f -exec cp {} upload/ \;
+          ls -lh upload
+
+      # latest.yml and latest-mac.yml are the update feeds. Uploading them
+      # is what makes an existing installation notice the new version, so a
+      # release missing them looks fine and quietly strands every user.
+      - name: Attach assets to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
+          fail_on_unmatched_files: true
+          files: upload/*

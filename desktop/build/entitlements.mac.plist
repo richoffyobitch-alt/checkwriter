@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened Runtime entitlements.
+
+  Apple's Hardened Runtime is required for notarization and blocks several
+  things Electron needs by default. These three are electron-builder's own
+  defaults, kept deliberately rather than invented: the first two are what
+  Electron documents as prerequisites for notarization (V8 writes executable
+  memory at runtime and the renderer will not start without them), and the
+  third is what lets the bundled native database module load.
+
+  disable-library-validation is the one worth a second look. It permits
+  dynamic libraries signed by another team to load into the process, which
+  is a real widening of the attack surface. It is here because the packaged
+  better-sqlite3 binary otherwise fails to load under a notarized signature.
+  Once there is a real Developer ID signature and a notarized build that has
+  actually been launched on a Mac, try removing this key and confirm the app
+  still opens its database — if it does, it should stay removed.
+
+  Deliberately absent: com.apple.security.network.server. The Express server
+  binds 127.0.0.1 only, which needs no entitlement, and granting the server
+  entitlement would permit binding to network interfaces — precisely what a
+  check register must not do.
+-->
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+  </dict>
+</plist>
