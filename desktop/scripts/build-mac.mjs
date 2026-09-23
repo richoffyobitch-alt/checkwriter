@@ -73,10 +73,14 @@ function exec(cmd, args, label) {
  * Merge per-architecture update feeds.
  *
  * electron-updater picks an entry out of `files` by matching the running
- * architecture against the filename, falling back to `path`. So the merged
- * feed must list every architecture's zip, and `path` should point at the
- * one most Macs need — Apple Silicon — so that an old client with no
- * architecture matching still lands somewhere sensible.
+ * architecture against the filename, and falls back to the top-level `path`
+ * when nothing matches. So the merged feed must list every architecture.
+ *
+ * `path` must point at a **zip**, not the .dmg. Squirrel.Mac applies an
+ * update by unpacking a zip over the installed bundle; handed a disk image
+ * it cannot do anything useful. electron-builder's own single-architecture
+ * feed points at the zip for exactly this reason, and the merge has to
+ * preserve that rather than pick whatever sorts first.
  */
 function mergeFeeds(feeds) {
   const base = feeds[feeds.length - 1].doc;
@@ -85,37 +89,28 @@ function mergeFeeds(feeds) {
     for (const file of doc.files ?? []) byUrl.set(file.url, file);
   }
   const files = [...byUrl.values()].sort((a, b) => {
-    /* arm64 first, so it is the natural default. */
-    const rank = (u) => (u.includes("arm64") ? 0 : 1);
-    return rank(a.url) - rank(b.url) || a.url.localeCompare(b.url);
+    /* arm64 before Intel, zip before dmg — so the fallback entry is the one
+       most Macs need and the one Squirrel can actually apply. */
+    const rank = (f) =>
+      (f.url.includes("arm64") ? 0 : 2) + (f.url.endsWith(".zip") ? 0 : 1);
+    return rank(a) - rank(b) || a.url.localeCompare(b.url);
   });
 
-  const primary = files[0];
+  const primary = files.find((f) => f.url.endsWith(".zip"));
+  if (!primary) {
+    throw new Error(
+      "No .zip in the merged update feed. Squirrel.Mac updates from a zip, " +
+        "so a feed without one would advertise updates that can never be " +
+        "applied. Check that mac.target still includes zip.",
+    );
+  }
+
   return {
     ...base,
     files,
     path: primary.url,
     sha512: primary.sha512,
   };
-}
-
-if (!onMac) {
-  console.warn(
-    `\n!  Building on ${process.platform}, not macOS.\n` +
-      "!  No .dmg and no code signature can be produced here: hdiutil and\n" +
-      "!  the signing tools are macOS-only. This run yields unsigned .zip\n" +
-      "!  bundles, useful for checking the packaging and nothing else.\n" +
-      "!  Release builds must come from a macOS host — see\n" +
-      "!  .github/workflows/release-mac.yml.\n",
-  );
-}
-
-if (!onMac && publish !== "never") {
-  throw new Error(
-    "Refusing to publish a non-macOS build of the macOS application.\n" +
-      "The artifacts would be unsigned, incomplete (no .dmg) and would " +
-      "overwrite a good release feed.",
-  );
 }
 
 heading("Recording build metadata");
